@@ -4,7 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SnakeFolder = ReplicatedStorage:WaitForChild("Snake")
 local Remotes = require(SnakeFolder:WaitForChild("Remotes"))
 local GridRenderer = require(SnakeFolder:WaitForChild("GridRenderer"))
-local GridConstants = require(SnakeFolder:WaitForChild("GridConstants"))
+local UI = require(SnakeFolder:WaitForChild("UI"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -17,7 +17,8 @@ local playButton = titleScreenGui.TitleFrame.PlayButton
 
 local gameFrame = gameScreenGui.GameFrame
 local gridContainer = gameFrame.GridContainer
-local hudScoreLabel = gameFrame.HUD.ScoreLabel
+local hudScoreLabel = gameFrame.TopBar.HUD.ScoreLabel
+local statusBar = gameFrame.TopBar.StatusBar
 
 local gameOverFrame = gameOverScreenGui.GameOverFrame
 local resultLabel = gameOverFrame.ResultLabel
@@ -25,8 +26,33 @@ local gameOverScoreLabel = gameOverFrame.ScoreLabel
 local playAgainButton = gameOverFrame.PlayAgainButton
 local mainMenuButton = gameOverFrame.MainMenuButton
 
-local cellLookup = GridRenderer.build(gridContainer, GridConstants.GRID_SIZE)
+-- Grid size is per-mode now, not a fixed global, so the grid can no longer be
+-- built once at script load -- it's (re)built in the PhaseChanged handler
+-- below, using the gridSize the server reports for whichever mode just
+-- started. Both start nil until the first "Playing" phase arrives.
+local cellLookup: { [string]: Frame }? = nil
 local lastSnapshot = nil
+
+-- One label per stat key seen in a snapshot, created on first sight -- so a new
+-- pickup type's stat (declared entirely in PickupTypes/PickupSet) shows up in
+-- the status bar automatically, with no changes needed here.
+local statLabels: { [string]: TextLabel } = {}
+
+local function capitalize(text: string): string
+	return text:sub(1, 1):upper() .. text:sub(2)
+end
+
+local function updateStatusBar(stats: { [string]: number })
+	for key, value in pairs(stats) do
+		local label = statLabels[key]
+		if not label then
+			label = UI.buildStatLabel(key .. "StatLabel")
+			label.Parent = statusBar
+			statLabels[key] = label
+		end
+		label.Text = string.format("%s: %d", capitalize(key), value)
+	end
+end
 
 -- Single phase -> visible-screen lookup; adding a future screen is a one-line addition here.
 local SCREENS_BY_PHASE = {
@@ -48,8 +74,14 @@ end
 
 showPhase("Title")
 
-Remotes.PhaseChanged.OnClientEvent:Connect(function(phase: string, payload: { score: number }?)
-	if phase == "GameOver" then
+Remotes.PhaseChanged.OnClientEvent:Connect(function(phase: string, payload: any?)
+	if phase == "Playing" then
+		local gridSize = payload and payload.gridSize
+		if gridSize then
+			cellLookup = GridRenderer.build(gridContainer, gridSize)
+			lastSnapshot = nil
+		end
+	elseif phase == "GameOver" then
 		resultLabel.Text = "Game Over"
 		gameOverScoreLabel.Text = "Score: " .. tostring(payload and payload.score or 0)
 	elseif phase == "Win" then
@@ -60,8 +92,11 @@ Remotes.PhaseChanged.OnClientEvent:Connect(function(phase: string, payload: { sc
 end)
 
 Remotes.StateUpdate.OnClientEvent:Connect(function(snapshot)
-	GridRenderer.render(cellLookup, snapshot, lastSnapshot)
+	if cellLookup then
+		GridRenderer.render(cellLookup, snapshot, lastSnapshot)
+	end
 	hudScoreLabel.Text = "Score: " .. tostring(snapshot.score)
+	updateStatusBar(snapshot.stats)
 	lastSnapshot = snapshot
 end)
 

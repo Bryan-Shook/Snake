@@ -1,11 +1,17 @@
 export type Direction = "Up" | "Down" | "Left" | "Right"
 export type CellPos = { x: number, y: number }
 
+export type Pickup = {
+	typeId: string,
+	position: CellPos,
+}
+
 export type SnakeState = {
 	segments: { CellPos },
 	direction: Direction,
 	directionQueue: { Direction },
-	food: CellPos,
+	pickups: { Pickup },
+	stats: { [string]: number },
 	score: number,
 	gridSize: number,
 }

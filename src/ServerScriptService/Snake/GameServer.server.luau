@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SnakeFolder = ReplicatedStorage:WaitForChild("Snake")
 local Remotes = require(SnakeFolder:WaitForChild("Remotes"))
 local SnakeSession = require(script.Parent:WaitForChild("SnakeSession"))
+local GameModes = require(SnakeFolder.Modes.GameModes)
 
 local VALID_DIRECTIONS = { Up = true, Down = true, Left = true, Right = true }
 
@@ -38,8 +39,9 @@ Players.PlayerRemoving:Connect(function(player)
 	end
 end)
 
-Remotes.RequestPlay.OnServerEvent:Connect(function(player)
-	getOrCreateSession(player):start()
+Remotes.RequestPlay.OnServerEvent:Connect(function(player, modeId)
+	local mode = GameModes.get(if typeof(modeId) == "string" then modeId else nil)
+	getOrCreateSession(player):start(mode)
 end)
 
 Remotes.RequestMainMenu.OnServerEvent:Connect(function(player)

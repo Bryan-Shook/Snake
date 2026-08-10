@@ -1,18 +1,29 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SnakeFolder = ReplicatedStorage:WaitForChild("Snake")
-local GridConstants = require(SnakeFolder:WaitForChild("GridConstants"))
 local SnakeMovement = require(SnakeFolder:WaitForChild("SnakeMovement"))
 local SnakeInteractions = require(SnakeFolder:WaitForChild("SnakeInteractions"))
 
 type SnakeState = SnakeMovement.SnakeState
 type Direction = SnakeMovement.Direction
 
+-- Duck-typed against Modes/GameModes.GameMode rather than requiring that
+-- module -- SnakeSession has no idea which mode is active, what its pickupSet
+-- contains, or even that "GameModes" exists as a concept. It just runs
+-- whatever config it's handed. Grid size and tick rate are mode config for
+-- exactly the same reason the pickup roster is: a "Big Board" or "Speed Run"
+-- variation is no less a mode than a different set of pickups.
+type ModeConfig = {
+	gridSize: number,
+	tickInterval: number,
+	pickupSet: { any },
+}
+
 local SnakeSession = {}
 SnakeSession.__index = SnakeSession
 
-local function createInitialState(): SnakeState
-	local gridSize = GridConstants.GRID_SIZE
+local function createInitialState(mode: ModeConfig): SnakeState
+	local gridSize = mode.gridSize
 	local startX = math.floor(gridSize / 2)
 	local startY = math.floor(gridSize / 2)
 
@@ -24,11 +35,18 @@ local function createInitialState(): SnakeState
 		},
 		direction = "Right",
 		directionQueue = {},
-		food = { x = 1, y = 1 },
+		pickups = {},
+		stats = SnakeInteractions.createInitialStats(mode.pickupSet),
 		score = 0,
 		gridSize = gridSize,
 	}
-	state.food = SnakeInteractions.spawnFood(state)
+
+	for _, entry in ipairs(mode.pickupSet) do
+		for _ = 1, entry.count do
+			table.insert(state.pickups, SnakeInteractions.spawnPickup(state, entry.type.id))
+		end
+	end
+
 	return state
 end
 
@@ -50,7 +68,8 @@ function SnakeSession:snapshot()
 	local state = self.state :: SnakeState
 	return {
 		segments = state.segments,
-		food = state.food,
+		pickups = state.pickups,
+		stats = state.stats,
 		score = state.score,
 		tick = self.tickCount,
 	}
@@ -63,18 +82,18 @@ function SnakeSession:queueTurn(direction: Direction)
 	SnakeMovement.queueTurn(self.state, direction)
 end
 
-function SnakeSession:start()
-	self.state = createInitialState()
+function SnakeSession:start(mode: ModeConfig)
+	self.state = createInitialState(mode)
 	self.phase = "Playing"
 	self.running = true
 	self.tickCount = 0
 
-	self.onPhaseChanged(self.player, "Playing", nil)
+	self.onPhaseChanged(self.player, "Playing", { gridSize = mode.gridSize })
 	self.onStateUpdate(self.player, self:snapshot())
 
 	task.spawn(function()
 		while self.running and self.phase == "Playing" do
-			task.wait(GridConstants.TICK_INTERVAL)
+			task.wait(mode.tickInterval)
 			if not self.running or self.phase ~= "Playing" then
 				break
 			end

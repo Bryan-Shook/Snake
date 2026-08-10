@@ -1,8 +1,8 @@
 local SnakeSkin = require(script.Parent.SnakeSkin)
+local PickupSkin = require(script.Parent.PickupSkin)
 
 local CHECKER_COLOR_LIGHT = Color3.fromRGB(46, 46, 52)
 local CHECKER_COLOR_DARK = Color3.fromRGB(30, 30, 35)
-local FOOD_COLOR = Color3.fromRGB(220, 70, 70)
 
 local GridRenderer = {}
 
@@ -90,8 +90,10 @@ function GridRenderer.build(container: Frame, gridSize: number): { [string]: Fra
 end
 
 -- Called on every StateUpdate: clears whatever the previous snapshot painted,
--- then paints the new snake/food cells, so at most (bodyLength + 1) cells are
--- touched per tick instead of repainting the whole grid.
+-- then paints the new snake/pickup cells, so at most (bodyLength + pickupCount)
+-- cells are touched per tick instead of repainting the whole grid. Pickup look
+-- is delegated to PickupSkin by typeId -- this function has no idea what a
+-- "Food" or "Coin" even is.
 function GridRenderer.render(cellLookup: { [string]: Frame }, snapshot, previousSnapshot)
 	if previousSnapshot then
 		for _, segment in ipairs(previousSnapshot.segments) do
@@ -101,9 +103,12 @@ function GridRenderer.render(cellLookup: { [string]: Frame }, snapshot, previous
 				cell.BackgroundColor3 = checkerColor(segment.x, segment.y)
 			end
 		end
-		local previousFoodCell = cellLookup[cellKey(previousSnapshot.food.x, previousSnapshot.food.y)]
-		if previousFoodCell then
-			previousFoodCell.BackgroundColor3 = checkerColor(previousSnapshot.food.x, previousSnapshot.food.y)
+		for _, pickup in ipairs(previousSnapshot.pickups) do
+			local cell = cellLookup[cellKey(pickup.position.x, pickup.position.y)]
+			if cell then
+				PickupSkin.clear(cell, pickup.typeId)
+				cell.BackgroundColor3 = checkerColor(pickup.position.x, pickup.position.y)
+			end
 		end
 	else
 		for key, cell in pairs(cellLookup) do
@@ -113,9 +118,11 @@ function GridRenderer.render(cellLookup: { [string]: Frame }, snapshot, previous
 		end
 	end
 
-	local foodCell = cellLookup[cellKey(snapshot.food.x, snapshot.food.y)]
-	if foodCell then
-		foodCell.BackgroundColor3 = FOOD_COLOR
+	for _, pickup in ipairs(snapshot.pickups) do
+		local cell = cellLookup[cellKey(pickup.position.x, pickup.position.y)]
+		if cell then
+			PickupSkin.decorate(cell, pickup.typeId)
+		end
 	end
 
 	local direction = inferDirection(snapshot.segments)

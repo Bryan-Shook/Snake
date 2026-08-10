@@ -55,6 +55,26 @@ local function makeLabel(name: string, text: string, position: UDim2, maxTextSiz
 	return label
 end
 
+-- Built lazily by ClientMain, one per stat key that shows up in a StateUpdate
+-- snapshot -- so a new pickup type's stat gets a status-bar entry automatically,
+-- with no UI.luau or ClientMain changes required.
+function UI.buildStatLabel(name: string): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextColor3 = TEXT_COLOR
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(0.32, 1)
+	label.LayoutOrder = 0
+
+	local textConstraint = Instance.new("UITextSizeConstraint")
+	textConstraint.MaxTextSize = 18
+	textConstraint.Parent = label
+
+	return label
+end
+
 function UI.buildTitleScreen(): ScreenGui
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "TitleScreenGui"
@@ -92,13 +112,31 @@ function UI.buildGameScreen(): ScreenGui
 	frame.BorderSizePixel = 0
 	frame.Parent = screenGui
 
+	-- TopBar stacks HUD (score) above StatusBar (per-pickup-type stat counters)
+	-- via a vertical UIListLayout, so the two bars' actual resolved heights
+	-- (which vary with screen size via their own constraints) never overlap.
+	local topBar = Instance.new("Frame")
+	topBar.Name = "TopBar"
+	topBar.Size = UDim2.new(1, 0, 0, 0)
+	topBar.AutomaticSize = Enum.AutomaticSize.Y
+	topBar.Position = UDim2.new(0.5, 0, 0, 10)
+	topBar.AnchorPoint = Vector2.new(0.5, 0)
+	topBar.BackgroundTransparency = 1
+	topBar.Parent = frame
+
+	local topBarLayout = Instance.new("UIListLayout")
+	topBarLayout.FillDirection = Enum.FillDirection.Vertical
+	topBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	topBarLayout.Padding = UDim.new(0, 6)
+	topBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	topBarLayout.Parent = topBar
+
 	local hud = Instance.new("Frame")
 	hud.Name = "HUD"
+	hud.LayoutOrder = 1
 	hud.Size = UDim2.fromScale(0.4, 0.06)
-	hud.Position = UDim2.new(0.5, 0, 0, 10)
-	hud.AnchorPoint = Vector2.new(0.5, 0)
 	hud.BackgroundTransparency = 1
-	hud.Parent = frame
+	hud.Parent = topBar
 
 	local hudSizeConstraint = Instance.new("UISizeConstraint")
 	hudSizeConstraint.MinSize = Vector2.new(220, 32)
@@ -107,7 +145,31 @@ function UI.buildGameScreen(): ScreenGui
 
 	local scoreLabel = makeLabel("ScoreLabel", "Score: 0", UDim2.fromScale(0.5, 0.5), 24)
 	scoreLabel.Size = UDim2.fromScale(1, 1)
+	scoreLabel.Position = UDim2.fromScale(0, 0)
+	scoreLabel.AnchorPoint = Vector2.new(0, 0)
 	scoreLabel.Parent = hud
+
+	-- Populated lazily client-side (see ClientMain) with one label per stat key
+	-- that appears in a StateUpdate snapshot.
+	local statusBar = Instance.new("Frame")
+	statusBar.Name = "StatusBar"
+	statusBar.LayoutOrder = 2
+	statusBar.Size = UDim2.fromScale(0.5, 0.045)
+	statusBar.BackgroundTransparency = 1
+	statusBar.Parent = topBar
+
+	local statusBarSizeConstraint = Instance.new("UISizeConstraint")
+	statusBarSizeConstraint.MinSize = Vector2.new(220, 26)
+	statusBarSizeConstraint.MaxSize = Vector2.new(480, 36)
+	statusBarSizeConstraint.Parent = statusBar
+
+	local statusBarLayout = Instance.new("UIListLayout")
+	statusBarLayout.FillDirection = Enum.FillDirection.Horizontal
+	statusBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	statusBarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	statusBarLayout.Padding = UDim.new(0, 16)
+	statusBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	statusBarLayout.Parent = statusBar
 
 	-- Bounding box is 85% of screen width/height; GridRenderer.build is responsible
 	-- for adding the aspect-ratio/size constraints that keep this square and clamped,
