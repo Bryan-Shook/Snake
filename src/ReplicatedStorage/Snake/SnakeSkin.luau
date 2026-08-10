@@ -47,16 +47,20 @@ local function makeEye(offset: Vector2): Frame
 	return eye
 end
 
--- Removes any snake-specific decoration (rounded corners, eyes) so the cell is
--- safe to hand back to the checkerboard/food. Always called before repainting a
--- cell, so decorateHead/decorateBody/clear are all safe to call repeatedly.
+-- `cell` here is always the transparent Entity overlay GridRenderer builds on
+-- top of each checkerboard tile (see GridRenderer.build), never the tile
+-- itself -- so making it transparent again on clear reveals the tile's
+-- checker color untouched, instead of the rounded corners cutting through to
+-- the grid container's flat background.
 function SnakeSkin.clear(cell: Frame)
 	cell:ClearAllChildren()
+	cell.BackgroundTransparency = 1
 end
 
 function SnakeSkin.decorateBody(cell: Frame)
 	cell:ClearAllChildren()
 	cell.BackgroundColor3 = BODY_COLOR
+	cell.BackgroundTransparency = 0
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.25, 0)
@@ -66,6 +70,7 @@ end
 function SnakeSkin.decorateHead(cell: Frame, direction: string)
 	cell:ClearAllChildren()
 	cell.BackgroundColor3 = HEAD_COLOR
+	cell.BackgroundTransparency = 0
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.35, 0)

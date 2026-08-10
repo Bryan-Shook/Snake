@@ -15,7 +15,13 @@ local SKINS: { [string]: { decorate: (Frame) -> (), clear: (Frame) -> () } } = {
 
 local PickupSkin = {}
 
+-- Transparency is managed here, not per-skin: `cell` is always the transparent
+-- Entity overlay GridRenderer builds on top of each checkerboard tile, and
+-- toggling it opaque/transparent is a structural concern shared by every
+-- skin, not something specific to what Food or Coin look like.
 function PickupSkin.decorate(cell: Frame, typeId: string)
+	cell.BackgroundTransparency = 0
+
 	local skin = SKINS[typeId]
 	if skin then
 		skin.decorate(cell)
@@ -34,6 +40,8 @@ function PickupSkin.clear(cell: Frame, typeId: string?)
 	else
 		cell:ClearAllChildren()
 	end
+
+	cell.BackgroundTransparency = 1
 end
 
 return PickupSkin

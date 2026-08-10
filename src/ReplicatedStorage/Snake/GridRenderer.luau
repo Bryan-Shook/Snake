@@ -10,11 +10,6 @@ local function cellKey(x: number, y: number): string
 	return x .. "," .. y
 end
 
-local function parseCellKey(key: string): (number, number)
-	local xStr, yStr = key:match("^(%-?%d+),(%-?%d+)$")
-	return tonumber(xStr) :: number, tonumber(yStr) :: number
-end
-
 -- Classic two-tone checkerboard: which shade a cell gets depends only on the
 -- parity of x+y, so neighboring cells always alternate.
 local function checkerColor(x: number, y: number): Color3
@@ -45,8 +40,14 @@ local function inferDirection(segments): string
 	return "Right"
 end
 
--- One-time setup: builds gridSize x gridSize empty Frame cells inside `container`
--- via UIGridLayout, returning a "x,y" -> Frame lookup so later updates are O(1) per cell.
+-- One-time setup: builds gridSize x gridSize checkerboard tiles inside
+-- `container` via UIGridLayout. Each tile gets a permanent, never-touched
+-- checker color, plus a child "Entity" overlay that starts fully transparent.
+-- SnakeSkin/PickupSkin only ever decorate the Entity overlay, never the tile
+-- -- so a rounded snake segment or pickup's corners reveal the correct
+-- checkerboard shade underneath instead of the container's flat background
+-- (which is what happened when entities recolored the tile Frame directly).
+-- Returns a "x,y" -> Entity Frame lookup so later updates are O(1) per cell.
 function GridRenderer.build(container: Frame, gridSize: number): { [string]: Frame }
 	container:ClearAllChildren()
 	container.ClipsDescendants = true
@@ -76,13 +77,21 @@ function GridRenderer.build(container: Frame, gridSize: number): { [string]: Fra
 	local cellLookup = {}
 	for y = 1, gridSize do
 		for x = 1, gridSize do
-			local cell = Instance.new("Frame")
-			cell.Name = cellKey(x, y)
-			cell.BackgroundColor3 = checkerColor(x, y)
-			cell.BorderSizePixel = 0
-			cell.LayoutOrder = (y - 1) * gridSize + x
-			cell.Parent = container
-			cellLookup[cellKey(x, y)] = cell
+			local tile = Instance.new("Frame")
+			tile.Name = cellKey(x, y)
+			tile.BackgroundColor3 = checkerColor(x, y)
+			tile.BorderSizePixel = 0
+			tile.LayoutOrder = (y - 1) * gridSize + x
+			tile.Parent = container
+
+			local entity = Instance.new("Frame")
+			entity.Name = "Entity"
+			entity.Size = UDim2.fromScale(1, 1)
+			entity.BackgroundTransparency = 1
+			entity.BorderSizePixel = 0
+			entity.Parent = tile
+
+			cellLookup[cellKey(x, y)] = entity
 		end
 	end
 
@@ -93,35 +102,58 @@ end
 -- then paints the new snake/pickup cells, so at most (bodyLength + pickupCount)
 -- cells are touched per tick instead of repainting the whole grid. Pickup look
 -- is delegated to PickupSkin by typeId -- this function has no idea what a
--- "Food" or "Coin" even is.
+-- "Food" or "Coin" even is. Clearing never needs to restore a checker color --
+-- the tile underneath was never touched, so making the Entity overlay
+-- transparent again (inside SnakeSkin.clear/PickupSkin.clear) reveals it as-is.
 function GridRenderer.render(cellLookup: { [string]: Frame }, snapshot, previousSnapshot)
 	if previousSnapshot then
 		for _, segment in ipairs(previousSnapshot.segments) do
 			local cell = cellLookup[cellKey(segment.x, segment.y)]
 			if cell then
 				SnakeSkin.clear(cell)
-				cell.BackgroundColor3 = checkerColor(segment.x, segment.y)
-			end
-		end
-		for _, pickup in ipairs(previousSnapshot.pickups) do
-			local cell = cellLookup[cellKey(pickup.position.x, pickup.position.y)]
-			if cell then
-				PickupSkin.clear(cell, pickup.typeId)
-				cell.BackgroundColor3 = checkerColor(pickup.position.x, pickup.position.y)
 			end
 		end
 	else
-		for key, cell in pairs(cellLookup) do
-			local x, y = parseCellKey(key)
+		for _, cell in pairs(cellLookup) do
 			SnakeSkin.clear(cell)
-			cell.BackgroundColor3 = checkerColor(x, y)
+		end
+	end
+
+	-- Pickups are diffed by key (unlike segments, which move every tick and so
+	-- get no benefit from diffing): a pickup sitting still for many ticks is
+	-- skipped entirely rather than cleared-then-redecorated every frame. This
+	-- matters beyond cost -- redecorating restarts any per-cell animated state
+	-- (e.g. CoinSkin's spin tween) from scratch, and doing that every ~100ms
+	-- resets it faster than it can ever visibly progress.
+	local currentPickupsByKey = {}
+	for _, pickup in ipairs(snapshot.pickups) do
+		currentPickupsByKey[cellKey(pickup.position.x, pickup.position.y)] = pickup
+	end
+
+	local previousPickupsByKey = {}
+	if previousSnapshot then
+		for _, pickup in ipairs(previousSnapshot.pickups) do
+			local key = cellKey(pickup.position.x, pickup.position.y)
+			previousPickupsByKey[key] = pickup
+
+			local current = currentPickupsByKey[key]
+			if not current or current.typeId ~= pickup.typeId then
+				local cell = cellLookup[key]
+				if cell then
+					PickupSkin.clear(cell, pickup.typeId)
+				end
+			end
 		end
 	end
 
 	for _, pickup in ipairs(snapshot.pickups) do
-		local cell = cellLookup[cellKey(pickup.position.x, pickup.position.y)]
-		if cell then
-			PickupSkin.decorate(cell, pickup.typeId)
+		local key = cellKey(pickup.position.x, pickup.position.y)
+		local previous = previousPickupsByKey[key]
+		if not previous or previous.typeId ~= pickup.typeId then
+			local cell = cellLookup[key]
+			if cell then
+				PickupSkin.decorate(cell, pickup.typeId)
+			end
 		end
 	end
 
