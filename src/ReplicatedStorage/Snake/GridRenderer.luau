@@ -6,6 +6,12 @@ local CHECKER_COLOR_DARK = Color3.fromRGB(30, 30, 35)
 
 local GridRenderer = {}
 
+export type GridHandle = {
+	cellLookup: { [string]: Frame },
+	snakeLayer: Frame,
+	gridSize: number,
+}
+
 local function cellKey(x: number, y: number): string
 	return x .. "," .. y
 end
@@ -19,36 +25,14 @@ local function checkerColor(x: number, y: number): Color3
 	return CHECKER_COLOR_DARK
 end
 
--- Facing direction is derived from the snapshot itself (head vs. the segment
--- behind it) rather than sent over the network, so SnakeSkin's eye direction
--- needs no server/remote-contract changes.
-local function inferDirection(segments): string
-	if #segments < 2 then
-		return "Right"
-	end
-	local head, neck = segments[1], segments[2]
-	local dx, dy = head.x - neck.x, head.y - neck.y
-	if dx == 1 then
-		return "Right"
-	elseif dx == -1 then
-		return "Left"
-	elseif dy == 1 then
-		return "Down"
-	elseif dy == -1 then
-		return "Up"
-	end
-	return "Right"
-end
-
--- One-time setup: builds gridSize x gridSize checkerboard tiles inside
--- `container` via UIGridLayout. Each tile gets a permanent, never-touched
--- checker color, plus a child "Entity" overlay that starts fully transparent.
--- SnakeSkin/PickupSkin only ever decorate the Entity overlay, never the tile
--- -- so a rounded snake segment or pickup's corners reveal the correct
--- checkerboard shade underneath instead of the container's flat background
--- (which is what happened when entities recolored the tile Frame directly).
--- Returns a "x,y" -> Entity Frame lookup so later updates are O(1) per cell.
-function GridRenderer.build(container: Frame, gridSize: number): { [string]: Frame }
+-- Builds the checkerboard inside its own TilesLayer (so its UIGridLayout only
+-- ever manages the tile cells themselves -- Roblox layout components affect
+-- every sibling under their parent, with no way to opt a specific child out),
+-- plus a separate SnakeLayer sibling that the snake renders into as one
+-- connected, absolute-positioned overlay. A tapering, connected body can't be
+-- built one isolated grid cell at a time the way pickups can, so it isn't
+-- part of the tile/cellLookup system at all.
+function GridRenderer.build(container: Frame, gridSize: number): GridHandle
 	container:ClearAllChildren()
 	container.ClipsDescendants = true
 
@@ -65,6 +49,13 @@ function GridRenderer.build(container: Frame, gridSize: number): { [string]: Fra
 	sizeConstraint.MaxSize = Vector2.new(720, 720)
 	sizeConstraint.Parent = container
 
+	local tilesLayer = Instance.new("Frame")
+	tilesLayer.Name = "TilesLayer"
+	tilesLayer.Size = UDim2.fromScale(1, 1)
+	tilesLayer.BackgroundTransparency = 1
+	tilesLayer.BorderSizePixel = 0
+	tilesLayer.Parent = container
+
 	-- Scale-based (not offset) so the grid actually fills whatever size the
 	-- container resolves to on any screen, rather than a fixed pixel footprint.
 	local layout = Instance.new("UIGridLayout")
@@ -72,7 +63,7 @@ function GridRenderer.build(container: Frame, gridSize: number): { [string]: Fra
 	layout.CellPadding = UDim2.fromScale(0, 0)
 	layout.FillDirectionMaxCells = gridSize
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = container
+	layout.Parent = tilesLayer
 
 	local cellLookup = {}
 	for y = 1, gridSize do
@@ -82,8 +73,13 @@ function GridRenderer.build(container: Frame, gridSize: number): { [string]: Fra
 			tile.BackgroundColor3 = checkerColor(x, y)
 			tile.BorderSizePixel = 0
 			tile.LayoutOrder = (y - 1) * gridSize + x
-			tile.Parent = container
+			tile.Parent = tilesLayer
 
+			-- Entity overlay: starts fully transparent so the tile's checker
+			-- color always shows through untouched; SnakeSkin/PickupSkin only
+			-- ever decorate THIS frame, never the tile itself, so an entity's
+			-- rounded corners reveal the correct checker shade underneath
+			-- instead of the container's flat background.
 			local entity = Instance.new("Frame")
 			entity.Name = "Entity"
 			entity.Size = UDim2.fromScale(1, 1)
@@ -95,36 +91,29 @@ function GridRenderer.build(container: Frame, gridSize: number): { [string]: Fra
 		end
 	end
 
-	return cellLookup
+	-- Sibling of TilesLayer (not a child of it), so it's outside the
+	-- UIGridLayout's reach entirely and can position shapes freely across
+	-- cell boundaries. ZIndex above the tiles/pickups so the snake always
+	-- reads as on top when it passes over anything.
+	local snakeLayer = Instance.new("Frame")
+	snakeLayer.Name = "SnakeLayer"
+	snakeLayer.Size = UDim2.fromScale(1, 1)
+	snakeLayer.BackgroundTransparency = 1
+	snakeLayer.BorderSizePixel = 0
+	snakeLayer.ZIndex = 10
+	snakeLayer.Parent = container
+
+	return { cellLookup = cellLookup, snakeLayer = snakeLayer, gridSize = gridSize }
 end
 
--- Called on every StateUpdate: clears whatever the previous snapshot painted,
--- then paints the new snake/pickup cells, so at most (bodyLength + pickupCount)
--- cells are touched per tick instead of repainting the whole grid. Pickup look
--- is delegated to PickupSkin by typeId -- this function has no idea what a
--- "Food" or "Coin" even is. Clearing never needs to restore a checker color --
--- the tile underneath was never touched, so making the Entity overlay
--- transparent again (inside SnakeSkin.clear/PickupSkin.clear) reveals it as-is.
-function GridRenderer.render(cellLookup: { [string]: Frame }, snapshot, previousSnapshot)
-	if previousSnapshot then
-		for _, segment in ipairs(previousSnapshot.segments) do
-			local cell = cellLookup[cellKey(segment.x, segment.y)]
-			if cell then
-				SnakeSkin.clear(cell)
-			end
-		end
-	else
-		for _, cell in pairs(cellLookup) do
-			SnakeSkin.clear(cell)
-		end
-	end
+-- Called on every StateUpdate. Pickups are diffed per-cell (isolated, mostly-
+-- static shapes -- diffing avoids interrupting animated skins like the
+-- coin's spin, see PickupSkin). The snake is redrawn from scratch every call
+-- via SnakeSkin, since its shape depends on the whole body at once, not any
+-- single cell in isolation.
+function GridRenderer.render(gridHandle: GridHandle, snapshot, previousSnapshot)
+	local cellLookup = gridHandle.cellLookup
 
-	-- Pickups are diffed by key (unlike segments, which move every tick and so
-	-- get no benefit from diffing): a pickup sitting still for many ticks is
-	-- skipped entirely rather than cleared-then-redecorated every frame. This
-	-- matters beyond cost -- redecorating restarts any per-cell animated state
-	-- (e.g. CoinSkin's spin tween) from scratch, and doing that every ~100ms
-	-- resets it faster than it can ever visibly progress.
 	local currentPickupsByKey = {}
 	for _, pickup in ipairs(snapshot.pickups) do
 		currentPickupsByKey[cellKey(pickup.position.x, pickup.position.y)] = pickup
@@ -157,17 +146,7 @@ function GridRenderer.render(cellLookup: { [string]: Frame }, snapshot, previous
 		end
 	end
 
-	local direction = inferDirection(snapshot.segments)
-	for index, segment in ipairs(snapshot.segments) do
-		local cell = cellLookup[cellKey(segment.x, segment.y)]
-		if cell then
-			if index == 1 then
-				SnakeSkin.decorateHead(cell, direction)
-			else
-				SnakeSkin.decorateBody(cell)
-			end
-		end
-	end
+	SnakeSkin.render(gridHandle.snakeLayer, snapshot.segments, gridHandle.gridSize)
 end
 
 return GridRenderer

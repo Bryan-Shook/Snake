@@ -30,7 +30,7 @@ local mainMenuButton = gameOverFrame.MainMenuButton
 -- built once at script load -- it's (re)built in the PhaseChanged handler
 -- below, using the gridSize the server reports for whichever mode just
 -- started. Both start nil until the first "Playing" phase arrives.
-local cellLookup: { [string]: Frame }? = nil
+local gridHandle: GridRenderer.GridHandle? = nil
 local lastSnapshot = nil
 
 -- One label per stat key seen in a snapshot, created on first sight -- so a new
@@ -78,7 +78,7 @@ Remotes.PhaseChanged.OnClientEvent:Connect(function(phase: string, payload: any?
 	if phase == "Playing" then
 		local gridSize = payload and payload.gridSize
 		if gridSize then
-			cellLookup = GridRenderer.build(gridContainer, gridSize)
+			gridHandle = GridRenderer.build(gridContainer, gridSize)
 			lastSnapshot = nil
 		end
 	elseif phase == "GameOver" then
@@ -92,8 +92,8 @@ Remotes.PhaseChanged.OnClientEvent:Connect(function(phase: string, payload: any?
 end)
 
 Remotes.StateUpdate.OnClientEvent:Connect(function(snapshot)
-	if cellLookup then
-		GridRenderer.render(cellLookup, snapshot, lastSnapshot)
+	if gridHandle then
+		GridRenderer.render(gridHandle, snapshot, lastSnapshot)
 	end
 	hudScoreLabel.Text = "Score: " .. tostring(snapshot.score)
 	updateStatusBar(snapshot.stats)
