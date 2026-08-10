@@ -1,27 +1,19 @@
--- The default snake look: a continuous, tapering body -- not a chain of
--- independently-rounded blocks -- with a rounded (but never fully closed)
--- tail and a distinct head with direction-facing eyes.
---
--- Rendered as an absolute-positioned overlay on the whole grid rather than
--- per-cell decoration, since tapering and connecting segments requires
--- knowing the whole body's shape at once, not just one cell in isolation.
--- The whole body is redrawn from scratch every call rather than diffed --
--- unlike pickups, a single segment's shape (width, color) depends on where
--- it sits in the WHOLE body, so incremental per-cell updates wouldn't save
--- meaningful work here.
+-- Default look: a continuous tapering body with a rounded (never fully
+-- closed) tail and a head with direction-facing eyes. Rendered as one
+-- absolute-positioned overlay, not per-cell decoration.
 local DefaultSnakeSkin = {}
 
 local HEAD_COLOR = Color3.fromRGB(120, 235, 140)
 local BODY_COLOR = Color3.fromRGB(70, 200, 100)
-local TAIL_COLOR = Color3.fromRGB(50, 160, 80)
+local TAIL_COLOR = Color3.fromRGB(22, 71, 35)
 local EYE_WHITE_COLOR = Color3.fromRGB(250, 250, 252)
 local EYE_PUPIL_COLOR = Color3.fromRGB(20, 20, 24)
 
 local HEAD_WIDTH_RATIO = 0.85 -- fraction of one grid cell
-local BODY_WIDTH_RATIO = 0.7 -- width of the segment right behind the head
-local MIN_BODY_WIDTH_RATIO = 0.35 -- floor so a very long snake's tail still never fully closes
-local TAPER_RATE = 0.012 -- how much thinner each successive segment is than the one before it
-local RECTANGLE_OVERLAP = 1.08 -- tiny safety margin so adjacent straight pieces never show a sub-pixel gap
+local BODY_WIDTH_RATIO = 0.80 -- width right behind the head
+local MIN_BODY_WIDTH_RATIO = 0.35 -- taper floor; tail never fully closes
+local TAPER_RATE = 0.04 -- width lost per segment
+local RECTANGLE_OVERLAP = 1.08 -- avoids sub-pixel gaps between pieces
 
 local EYE_OFFSETS: { [string]: { Vector2 } } = {
 	Right = { Vector2.new(0.62, 0.32), Vector2.new(0.62, 0.68) },
@@ -53,15 +45,8 @@ local function segmentCenter(segment, gridSize: number): Vector2
 	return Vector2.new((segment.x - 0.5) / gridSize, (segment.y - 0.5) / gridSize)
 end
 
--- Constant-rate taper: each segment is exactly TAPER_RATE thinner than the
--- one before it, all the way from just behind the head to the tail -- no
--- fixed-length "taper zone" with its own start boundary (that boundary was
--- itself the source of the visible discontinuity). A freshly-spawned, short
--- snake barely tapers at all, since there are only a couple of segments to
--- apply the rate over; the tail only ends up meaningfully thinner once the
--- snake has grown long enough to accumulate more steps of the same rate.
--- Clamped at MIN_BODY_WIDTH_RATIO so an arbitrarily long snake's tail still
--- never fully closes.
+-- Constant-rate taper: each segment is TAPER_RATE thinner than the last,
+-- clamped at MIN_BODY_WIDTH_RATIO. Short snakes barely taper; long ones do.
 local function widthRatioForIndex(index: number): number
 	if index == 1 then
 		return HEAD_WIDTH_RATIO
@@ -136,9 +121,7 @@ local function addHead(layer: Frame, segments, gridSize: number)
 	end
 end
 
--- The tail is the one place a circle (full rounding) is correct per the
--- spec: it's just the last point on the same continuous taper, but rendered
--- as a real circle, never a sharp point.
+-- Tail is the last taper point, rendered as a full circle (never a sharp point).
 local function addTail(layer: Frame, segments, gridSize: number)
 	local total = #segments
 	local center = segmentCenter(segments[total], gridSize)
@@ -159,9 +142,7 @@ local function addTail(layer: Frame, segments, gridSize: number)
 	corner.Parent = tail
 end
 
--- A flat (non-rounded) rectangle bridging two consecutive segment centers --
--- the "body doesn't have rounded corners" requirement -- oriented and sized
--- so it exactly spans the gap between them.
+-- Flat rectangle bridging two consecutive segment centers.
 local function addConnector(layer: Frame, fromSegment, toSegment, fromIndex: number, toIndex: number, gridSize: number)
 	local p1 = segmentCenter(fromSegment, gridSize)
 	local p2 = segmentCenter(toSegment, gridSize)
@@ -170,12 +151,8 @@ local function addConnector(layer: Frame, fromSegment, toSegment, fromIndex: num
 	local length = delta.Magnitude * RECTANGLE_OVERLAP
 	local angle = math.atan2(delta.Y, delta.X) * (180 / math.pi)
 
-	-- The head isn't part of the tapering chain -- it's a separate, wider,
-	-- differently-rounded shape -- so blending its width into this connector
-	-- would make the neck flare out wider than segment 2's own joint right
-	-- as it leaves the head, then immediately narrow again. Using segment 2's
-	-- width alone means the neck is a consistent tube the whole way, and the
-	-- head (wider, drawn on top) simply overlaps its base with no seam.
+	-- Use segment 2's width alone (not blended with the head) so the neck
+	-- doesn't flare wider than segment 2's own joint.
 	local widthRatio, color
 	if fromIndex == 1 then
 		widthRatio = widthRatioForIndex(toIndex)
@@ -198,15 +175,8 @@ local function addConnector(layer: Frame, fromSegment, toSegment, fromIndex: num
 	connector.Parent = layer
 end
 
--- A joint at every interior segment, not just turns: since every segment is
--- a little thinner than the one before it, even two straight, collinear
--- connectors on either side of a segment have slightly different widths, and
--- nothing else smooths that step -- without this, it's a visible "shelf."
--- Where the width genuinely doesn't change (a clamped-flat run at
--- MIN_BODY_WIDTH_RATIO), this is invisible: a circle inscribed exactly
--- within two same-width, collinear rectangles sits entirely inside their
--- silhouette. It only actually pokes out (rounding a corner) where the
--- width is changing or the path turns -- exactly where rounding is needed.
+-- Joint at every interior segment, not just turns -- smooths the width step
+-- between differently-tapered connectors. Invisible where width is flat.
 local function addJoint(layer: Frame, segment, index: number, gridSize: number)
 	local center = segmentCenter(segment, gridSize)
 	local size = widthRatioForIndex(index) / gridSize

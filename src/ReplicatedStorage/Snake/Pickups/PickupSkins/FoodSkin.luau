@@ -1,6 +1,4 @@
--- Food's own skin: a plain red circle. Deliberately the simplest possible
--- skin, to contrast with CoinSkin's shine+spin -- skins are free to diverge
--- as much or as little as the pickup type warrants.
+-- Plain red circle, deliberately simple.
 local FoodSkin = {}
 
 local FOOD_COLOR = Color3.fromRGB(220, 70, 70)

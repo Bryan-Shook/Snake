@@ -7,8 +7,7 @@ Players.CharacterAutoLoads = false
 local SnakeFolder = ReplicatedStorage:WaitForChild("Snake")
 local UI = require(SnakeFolder:WaitForChild("UI"))
 
--- StarterGui does not auto-clone into PlayerGui without a character spawning,
--- so the three screens are built fresh per player and parented in here instead.
+-- No character spawns, so StarterGui won't auto-clone; build screens manually.
 local function setupPlayer(player: Player)
 	local playerGui = player:WaitForChild("PlayerGui")
 

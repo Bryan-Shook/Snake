@@ -30,18 +30,13 @@ local OPPOSITE: { [Direction]: Direction } = {
 	Right = "Left",
 }
 
--- Caps how many turns can be buffered ahead of the tick loop. Without a cap, a
--- player mashing keys could queue turns many ticks further ahead than what's
--- currently on screen; 2 is enough for a fluid zigzag without that drift.
+-- Caps how many turns can be buffered ahead of the tick loop.
 local MAX_QUEUED_TURNS = 2
 
 local SnakeMovement = {}
 
--- Validates a turn against the last direction already queued (falling back to the
--- committed direction if the queue is empty) -- NOT against the stale committed
--- direction -- so a rapid Up-then-Left both queue correctly instead of the second
--- being checked against a direction it's not actually turning away from. Call this
--- immediately when input arrives; queued turns are consumed one per tick in step().
+-- Validates against the last queued direction (not the stale committed one),
+-- so rapid turns queue correctly. Consumed one per tick in step().
 function SnakeMovement.queueTurn(state: SnakeState, requestedDirection: Direction): boolean
 	local referenceDirection = state.directionQueue[#state.directionQueue] or state.direction
 
@@ -57,9 +52,8 @@ function SnakeMovement.queueTurn(state: SnakeState, requestedDirection: Directio
 	return true
 end
 
--- Commits the next queued turn (if any), then returns the candidate next head
--- position without mutating state.segments. The caller must check collisions
--- against this candidate before calling commitMove.
+-- Commits the next queued turn and returns the candidate head, unmutated.
+-- Caller must check collisions before calling commitMove.
 function SnakeMovement.step(state: SnakeState): CellPos
 	if #state.directionQueue > 0 then
 		state.direction = table.remove(state.directionQueue, 1)
@@ -70,8 +64,7 @@ function SnakeMovement.step(state: SnakeState): CellPos
 	return { x = head.x + delta.x, y = head.y + delta.y }
 end
 
--- Applies a candidate head position that has already been validated as safe.
--- When grow is false, the tail segment is dropped so total length stays constant.
+-- Applies a pre-validated head position; drops the tail unless grow is true.
 function SnakeMovement.commitMove(state: SnakeState, newHead: CellPos, grow: boolean)
 	table.insert(state.segments, 1, newHead)
 	if not grow then

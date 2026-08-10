@@ -26,16 +26,11 @@ local gameOverScoreLabel = gameOverFrame.ScoreLabel
 local playAgainButton = gameOverFrame.PlayAgainButton
 local mainMenuButton = gameOverFrame.MainMenuButton
 
--- Grid size is per-mode now, not a fixed global, so the grid can no longer be
--- built once at script load -- it's (re)built in the PhaseChanged handler
--- below, using the gridSize the server reports for whichever mode just
--- started. Both start nil until the first "Playing" phase arrives.
+-- Grid is per-mode, so it's (re)built in the PhaseChanged handler, not at load.
 local gridHandle: GridRenderer.GridHandle? = nil
 local lastSnapshot = nil
 
--- One label per stat key seen in a snapshot, created on first sight -- so a new
--- pickup type's stat (declared entirely in PickupTypes/PickupSet) shows up in
--- the status bar automatically, with no changes needed here.
+-- One label per stat key, created on first sight.
 local statLabels: { [string]: TextLabel } = {}
 
 local function capitalize(text: string): string
@@ -54,7 +49,7 @@ local function updateStatusBar(stats: { [string]: number })
 	end
 end
 
--- Single phase -> visible-screen lookup; adding a future screen is a one-line addition here.
+-- Phase -> visible screen lookup.
 local SCREENS_BY_PHASE = {
 	Title = titleScreenGui,
 	Playing = gameScreenGui,

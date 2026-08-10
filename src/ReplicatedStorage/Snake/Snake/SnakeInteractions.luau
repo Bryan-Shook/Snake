@@ -1,5 +1,6 @@
 local SnakeMovement = require(script.Parent.SnakeMovement)
-local PickupTypes = require(script.Parent.Pickups.PickupTypes)
+local PickupTypes = require(script.Parent.Parent.Pickups.PickupTypes)
+local PickupSet = require(script.Parent.Parent.Pickups.PickupSets.PickupSet)
 
 type CellPos = SnakeMovement.CellPos
 type SnakeState = SnakeMovement.SnakeState
@@ -10,10 +11,8 @@ export type CollisionResult = { kind: CollisionKind, pickupIndex: number? }
 
 local SnakeInteractions = {}
 
--- Pure check against the pre-move state: does the candidate head land on any
--- active pickup, outside the grid, or on the snake's own body? The tail
--- segment is excluded from the self-check because it vacates this tick on a
--- non-growing move. Pickup type doesn't matter here -- that's resolve()'s job.
+-- Checks the candidate head against pickups, walls, and self. Tail is
+-- excluded from the self-check since it vacates on a non-growing move.
 function SnakeInteractions.checkCollision(state: SnakeState, newHead: CellPos): CollisionResult
 	for index, pickup in ipairs(state.pickups) do
 		if pickup.position.x == newHead.x and pickup.position.y == newHead.y then
@@ -49,9 +48,7 @@ local function isCellOccupied(state: SnakeState, position: CellPos): boolean
 	return false
 end
 
--- Generic random-empty-cell search, reused for any pickup type -- spawning
--- doesn't care what the pickup does, only that its cell is free of the snake
--- and every other currently-active pickup.
+-- Finds a random empty cell, ignoring pickup type.
 function SnakeInteractions.spawnPickup(state: SnakeState, typeId: string): Pickup
 	local emptyCells = {}
 	for x = 1, state.gridSize do
@@ -67,12 +64,8 @@ function SnakeInteractions.spawnPickup(state: SnakeState, typeId: string): Picku
 	return { typeId = typeId, position = position }
 end
 
--- Zeroes a stats counter for every type in the *active* pickupSet that tracks
--- one -- scoped to the mode's actual roster (not every registered type ever),
--- so a mode without Coins doesn't get a stray "Coins: 0" in its status bar,
--- and a new pickup type automatically gets a stats entry the moment some
--- mode's PickupSet includes it, with no SnakeSession changes.
-function SnakeInteractions.createInitialStats(pickupSet: { any }): { [string]: number }
+-- Zeroes stats for every trackable type in pickupSet.
+function SnakeInteractions.createInitialStats(pickupSet: PickupSet.PickupSet): { [string]: number }
 	local stats = {}
 	for _, entry in ipairs(pickupSet) do
 		local statKey = entry.type.statKey
@@ -83,12 +76,13 @@ function SnakeInteractions.createInitialStats(pickupSet: { any }): { [string]: n
 	return stats
 end
 
--- Resolves a collision result into a game outcome, committing the move (via
--- SnakeMovement.commitMove) whenever it's safe. Growth, scoring, per-type stat
--- tracking, and respawning are all driven generically off the PickupTypes
--- registry, so a new pickup type (including power-ups/negative effects via
--- onCollect) never requires a change to this function.
-function SnakeInteractions.resolve(state: SnakeState, result: CollisionResult, newHead: CellPos): "Continue" | "GameOver" | "Win"
+-- Resolves a collision into an outcome. Growth/scoring/stats/respawn are all
+-- driven generically off PickupTypes, so new pickup types need no changes here.
+function SnakeInteractions.resolve(
+	state: SnakeState,
+	result: CollisionResult,
+	newHead: CellPos
+): "Continue" | "GameOver" | "Win"
 	if result.kind == "Wall" or result.kind == "Self" then
 		return "GameOver"
 	end

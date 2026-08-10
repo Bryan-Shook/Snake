@@ -5,9 +5,8 @@ local PANEL_COLOR = Color3.fromRGB(32, 32, 38)
 local TEXT_COLOR = Color3.fromRGB(235, 235, 240)
 local ACCENT_COLOR = Color3.fromRGB(90, 200, 120)
 
--- Sized as a fraction of the screen (via TextScaled/UISizeConstraint) rather than
--- fixed pixels, with a Min/Max clamp so buttons stay legible on a small phone and
--- don't balloon on a 4K monitor.
+-- Sized as a screen fraction with a Min/Max clamp, so it's legible on phone
+-- and doesn't balloon on 4K.
 local function makeButton(name: string, text: string, position: UDim2): TextButton
 	local button = Instance.new("TextButton")
 	button.Name = name
@@ -55,9 +54,7 @@ local function makeLabel(name: string, text: string, position: UDim2, maxTextSiz
 	return label
 end
 
--- Built lazily by ClientMain, one per stat key that shows up in a StateUpdate
--- snapshot -- so a new pickup type's stat gets a status-bar entry automatically,
--- with no UI.luau or ClientMain changes required.
+-- Built lazily by ClientMain, one per stat key seen in a StateUpdate snapshot.
 function UI.buildStatLabel(name: string): TextLabel
 	local label = Instance.new("TextLabel")
 	label.Name = name
@@ -112,9 +109,7 @@ function UI.buildGameScreen(): ScreenGui
 	frame.BorderSizePixel = 0
 	frame.Parent = screenGui
 
-	-- TopBar stacks HUD (score) above StatusBar (per-pickup-type stat counters)
-	-- via a vertical UIListLayout, so the two bars' actual resolved heights
-	-- (which vary with screen size via their own constraints) never overlap.
+	-- Stacks HUD above StatusBar via UIListLayout so their heights never overlap.
 	local topBar = Instance.new("Frame")
 	topBar.Name = "TopBar"
 	topBar.Size = UDim2.new(1, 0, 0, 0)
@@ -149,8 +144,7 @@ function UI.buildGameScreen(): ScreenGui
 	scoreLabel.AnchorPoint = Vector2.new(0, 0)
 	scoreLabel.Parent = hud
 
-	-- Populated lazily client-side (see ClientMain) with one label per stat key
-	-- that appears in a StateUpdate snapshot.
+	-- Populated lazily by ClientMain, one label per stat key.
 	local statusBar = Instance.new("Frame")
 	statusBar.Name = "StatusBar"
 	statusBar.LayoutOrder = 2
@@ -171,9 +165,7 @@ function UI.buildGameScreen(): ScreenGui
 	statusBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	statusBarLayout.Parent = statusBar
 
-	-- Bounding box is 85% of screen width/height; GridRenderer.build is responsible
-	-- for adding the aspect-ratio/size constraints that keep this square and clamped,
-	-- since it also owns filling this container (and clears its children first).
+	-- 85% of screen; GridRenderer.build adds the square/clamp constraints and fills it.
 	local gridContainer = Instance.new("Frame")
 	gridContainer.Name = "GridContainer"
 	gridContainer.Size = UDim2.fromScale(0.85, 0.85)

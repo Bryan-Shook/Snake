@@ -1,14 +1,5 @@
--- Coin's own skin: a gold circle with a bright shine streak swept across it,
--- spun via TweenService so it reads as a coin rather than a static dot.
---
--- The shine is rotated directly, NOT the coin cell itself. Cells are children
--- of a UIGridLayout-managed container, and layout-managed GuiObjects don't
--- propagate their Rotation to descendants the way a plain, unmanaged Frame
--- does (confirmed empirically: rotating a grid-layout cell left a child's
--- AbsolutePosition completely unchanged, while rotating an ordinary Frame
--- visibly carried its child along). The shine itself isn't grid-managed, so
--- rotating it directly works -- and it's shaped as a streak rather than a
--- dot, since a rotating circle looks identical at every angle anyway.
+-- Gold circle with a spinning shine streak. Shine is rotated directly (not
+-- the cell) since grid-layout-managed Frames don't propagate Rotation.
 local TweenService = game:GetService("TweenService")
 
 local CoinSkin = {}
@@ -18,8 +9,7 @@ local SHINE_COLOR = Color3.fromRGB(255, 250, 220)
 
 local SPIN_TWEEN_INFO = TweenInfo.new(1.5, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, false)
 
--- Keyed by the shine Frame itself so clear() can find and cancel the exact
--- tween it started, even though many cells share this one skin module.
+-- Keyed by shine Frame so clear() can cancel the exact tween it started.
 local activeTweens: { [Frame]: Tween } = {}
 
 function CoinSkin.decorate(cell: Frame)

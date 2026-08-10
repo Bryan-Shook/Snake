@@ -1,13 +1,18 @@
--- Gameplay-only registry: what each pickup type DOES when collected. Nothing
--- here knows how a pickup looks (see PickupSkin) or which types are active in
--- the current mode (see PickupSet) -- adding a new type is just a new entry
--- below, plus a visual in PickupSkin if it needs one.
+local FoodSkin = require(script.Parent.PickupSkins.FoodSkin)
+local CoinSkin = require(script.Parent.PickupSkins.CoinSkin)
+
+export type PickupTypeSkin = {
+	decorate: (cell: Frame) -> (),
+	clear: (cell: Frame) -> (),
+}
+
 export type PickupType = {
 	id: string,
-	grow: boolean, -- does colliding with this lengthen the snake by one segment?
-	statKey: string?, -- key in state.stats to increment on collect (nil = untracked)
+	grow: boolean, -- lengthens the snake by one segment on collect
+	statKey: string?, -- stats key to bump on collect; nil = untracked
 	statIncrement: number?, -- defaults to 1
-	onCollect: ((state: any) -> ())?, -- optional custom effect hook for power-ups/negative effects
+	onCollect: ((state: any) -> ())?, -- extra effect statKey can't express
+	skin: PickupTypeSkin, -- how this type renders
 }
 
 local PickupTypes = {}
@@ -17,6 +22,7 @@ PickupTypes.Food = {
 	grow = true,
 	statKey = "food",
 	statIncrement = 1,
+	skin = FoodSkin,
 } :: PickupType
 
 PickupTypes.Coin = {
@@ -24,10 +30,9 @@ PickupTypes.Coin = {
 	grow = false,
 	statKey = "coins",
 	statIncrement = 1,
+	skin = CoinSkin,
 } :: PickupType
 
--- Ordered (not just a dict) so stat-initialization and status-bar ordering are
--- deterministic rather than depending on table iteration order.
 PickupTypes.ORDERED = { PickupTypes.Food, PickupTypes.Coin }
 
 function PickupTypes.get(typeId: string): PickupType?

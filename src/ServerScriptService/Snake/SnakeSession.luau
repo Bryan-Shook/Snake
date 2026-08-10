@@ -1,22 +1,19 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SnakeFolder = ReplicatedStorage:WaitForChild("Snake")
-local SnakeMovement = require(SnakeFolder:WaitForChild("SnakeMovement"))
-local SnakeInteractions = require(SnakeFolder:WaitForChild("SnakeInteractions"))
+local SnakeSubFolder = SnakeFolder:WaitForChild("Snake")
+local SnakeMovement = require(SnakeSubFolder:WaitForChild("SnakeMovement"))
+local SnakeInteractions = require(SnakeSubFolder:WaitForChild("SnakeInteractions"))
+local PickupSet = require(SnakeFolder.Pickups.PickupSets.PickupSet)
 
 type SnakeState = SnakeMovement.SnakeState
 type Direction = SnakeMovement.Direction
 
--- Duck-typed against Modes/GameModes.GameMode rather than requiring that
--- module -- SnakeSession has no idea which mode is active, what its pickupSet
--- contains, or even that "GameModes" exists as a concept. It just runs
--- whatever config it's handed. Grid size and tick rate are mode config for
--- exactly the same reason the pickup roster is: a "Big Board" or "Speed Run"
--- variation is no less a mode than a different set of pickups.
+-- Duck-typed against GameModes.GameMode; SnakeSession has no idea GameModes exists.
 type ModeConfig = {
 	gridSize: number,
 	tickInterval: number,
-	pickupSet: { any },
+	pickupSet: PickupSet.PickupSet,
 }
 
 local SnakeSession = {}
@@ -50,8 +47,7 @@ local function createInitialState(mode: ModeConfig): SnakeState
 	return state
 end
 
--- onStateUpdate(player, snapshot) and onPhaseChanged(player, phase, payload?) are
--- injected so this module has no direct dependency on RemoteEvents/networking.
+-- Callbacks are injected so this module has no direct dependency on RemoteEvents.
 function SnakeSession.new(player: Player, onStateUpdate: (Player, any) -> (), onPhaseChanged: (Player, string, any?) -> ())
 	local self = setmetatable({}, SnakeSession)
 	self.player = player

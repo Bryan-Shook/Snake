@@ -1,5 +1,5 @@
-local SnakeSkin = require(script.Parent.SnakeSkin)
-local PickupSkin = require(script.Parent.PickupSkin)
+local SnakeSkin = require(script.Parent.Snake.SnakeSkin)
+local PickupSkin = require(script.Parent.Pickups.PickupSkin)
 
 local CHECKER_COLOR_LIGHT = Color3.fromRGB(46, 46, 52)
 local CHECKER_COLOR_DARK = Color3.fromRGB(30, 30, 35)
@@ -16,8 +16,7 @@ local function cellKey(x: number, y: number): string
 	return x .. "," .. y
 end
 
--- Classic two-tone checkerboard: which shade a cell gets depends only on the
--- parity of x+y, so neighboring cells always alternate.
+-- Two-tone checkerboard based on x+y parity.
 local function checkerColor(x: number, y: number): Color3
 	if (x + y) % 2 == 0 then
 		return CHECKER_COLOR_LIGHT
@@ -25,21 +24,15 @@ local function checkerColor(x: number, y: number): Color3
 	return CHECKER_COLOR_DARK
 end
 
--- Builds the checkerboard inside its own TilesLayer (so its UIGridLayout only
--- ever manages the tile cells themselves -- Roblox layout components affect
--- every sibling under their parent, with no way to opt a specific child out),
--- plus a separate SnakeLayer sibling that the snake renders into as one
--- connected, absolute-positioned overlay. A tapering, connected body can't be
--- built one isolated grid cell at a time the way pickups can, so it isn't
--- part of the tile/cellLookup system at all.
+-- Builds the checkerboard in its own TilesLayer (UIGridLayout only manages
+-- tiles), plus a sibling SnakeLayer the snake renders into as one overlay --
+-- a connected body can't be built one grid cell at a time like pickups can.
 function GridRenderer.build(container: Frame, gridSize: number): GridHandle
 	container:ClearAllChildren()
 	container.ClipsDescendants = true
 
-	-- Container is given a scale-based bounding box by UI.luau; this constraint
-	-- shrinks whichever axis is larger so it always resolves to a square,
-	-- regardless of the screen's own aspect ratio, then the size constraint
-	-- clamps the result so it's never illegibly tiny or absurdly large.
+	-- Forces the container to a square regardless of screen aspect ratio,
+	-- then clamps so it's never too tiny or too large.
 	local aspectRatio = Instance.new("UIAspectRatioConstraint")
 	aspectRatio.AspectRatio = 1
 	aspectRatio.Parent = container
@@ -56,8 +49,7 @@ function GridRenderer.build(container: Frame, gridSize: number): GridHandle
 	tilesLayer.BorderSizePixel = 0
 	tilesLayer.Parent = container
 
-	-- Scale-based (not offset) so the grid actually fills whatever size the
-	-- container resolves to on any screen, rather than a fixed pixel footprint.
+	-- Scale-based so the grid fills the container on any screen size.
 	local layout = Instance.new("UIGridLayout")
 	layout.CellSize = UDim2.fromScale(1 / gridSize, 1 / gridSize)
 	layout.CellPadding = UDim2.fromScale(0, 0)
@@ -75,11 +67,8 @@ function GridRenderer.build(container: Frame, gridSize: number): GridHandle
 			tile.LayoutOrder = (y - 1) * gridSize + x
 			tile.Parent = tilesLayer
 
-			-- Entity overlay: starts fully transparent so the tile's checker
-			-- color always shows through untouched; SnakeSkin/PickupSkin only
-			-- ever decorate THIS frame, never the tile itself, so an entity's
-			-- rounded corners reveal the correct checker shade underneath
-			-- instead of the container's flat background.
+			-- Transparent overlay skins decorate, so the tile's own checker
+			-- color always shows through untouched underneath.
 			local entity = Instance.new("Frame")
 			entity.Name = "Entity"
 			entity.Size = UDim2.fromScale(1, 1)
@@ -91,10 +80,8 @@ function GridRenderer.build(container: Frame, gridSize: number): GridHandle
 		end
 	end
 
-	-- Sibling of TilesLayer (not a child of it), so it's outside the
-	-- UIGridLayout's reach entirely and can position shapes freely across
-	-- cell boundaries. ZIndex above the tiles/pickups so the snake always
-	-- reads as on top when it passes over anything.
+	-- Sibling of TilesLayer, outside the grid layout's reach. ZIndex above
+	-- tiles/pickups so the snake always renders on top.
 	local snakeLayer = Instance.new("Frame")
 	snakeLayer.Name = "SnakeLayer"
 	snakeLayer.Size = UDim2.fromScale(1, 1)
@@ -106,11 +93,8 @@ function GridRenderer.build(container: Frame, gridSize: number): GridHandle
 	return { cellLookup = cellLookup, snakeLayer = snakeLayer, gridSize = gridSize }
 end
 
--- Called on every StateUpdate. Pickups are diffed per-cell (isolated, mostly-
--- static shapes -- diffing avoids interrupting animated skins like the
--- coin's spin, see PickupSkin). The snake is redrawn from scratch every call
--- via SnakeSkin, since its shape depends on the whole body at once, not any
--- single cell in isolation.
+-- Called on every StateUpdate. Pickups are diffed per-cell (avoids
+-- interrupting animated skins); the snake is redrawn from scratch each call.
 function GridRenderer.render(gridHandle: GridHandle, snapshot, previousSnapshot)
 	local cellLookup = gridHandle.cellLookup
 

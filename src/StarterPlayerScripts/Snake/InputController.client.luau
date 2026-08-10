@@ -4,9 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SnakeFolder = ReplicatedStorage:WaitForChild("Snake")
 local Remotes = require(SnakeFolder:WaitForChild("Remotes"))
 
--- Each action is bound to both its arrow-key and WASD equivalent, and to a
--- touch button (createTouchButton = true below), so keyboard, WASD, and mobile
--- all drive the exact same action name -> the "one unified input path" requirement.
+-- Bound to arrow keys, WASD, and a touch button -- all drive the same action.
 local ACTIONS = {
 	MoveUp = { Enum.KeyCode.Up, Enum.KeyCode.W },
 	MoveDown = { Enum.KeyCode.Down, Enum.KeyCode.S },
